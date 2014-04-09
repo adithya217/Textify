@@ -5,6 +5,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.util.Arrays;
 
 import android.app.Activity;
 import android.content.Intent;
@@ -21,6 +22,7 @@ import android.util.Log;
 import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.ImageView;
 
 import com.googlecode.tesseract.android.TessBaseAPI;
 
@@ -37,16 +39,26 @@ public class MainActivity extends Activity {
 	private static final String TAG = "MainActivity.java";
 
 	protected Button _button;
-	// protected ImageView _image;
+	protected ImageView _image;
 	protected EditText _field;
 	protected String _path;
 	protected boolean _taken;
+	protected Button _textifyButton;
+	protected Button _resetButton;
 
 	protected static final String PHOTO_TAKEN = "photo_taken";
+	
+	protected AssetManager assetManager;
+	protected DetectTextNative dtNative;
+	
+	protected Bitmap originalImageBitmap;
+	protected int[] boundingBoxesData = new int[0];
 
 	@Override
 	public void onCreate(Bundle savedInstanceState) {
 
+		assetManager = getAssets();
+		dtNative = new DetectTextNative(assetManager);
 		String[] paths = new String[] { DATA_PATH, DATA_PATH + "tessdata/" };
 
 		for (String path : paths) {
@@ -59,7 +71,6 @@ public class MainActivity extends Activity {
 					Log.v(TAG, "Created directory " + path + " on sdcard");
 				}
 			}
-
 		}
 		
 		// lang.traineddata file with the app (in assets folder)
@@ -68,8 +79,6 @@ public class MainActivity extends Activity {
 		// This area needs work and optimization
 		if (!(new File(DATA_PATH + "tessdata/" + lang + ".traineddata")).exists()) {
 			try {
-
-				AssetManager assetManager = getAssets();
 				InputStream in = assetManager.open("tessdata/" + lang + ".traineddata");
 				//GZIPInputStream gin = new GZIPInputStream(in);
 				OutputStream out = new FileOutputStream(DATA_PATH
@@ -96,18 +105,45 @@ public class MainActivity extends Activity {
 
 		setContentView(R.layout.main);
 
-		// _image = (ImageView) findViewById(R.id.image);
-		_field = (EditText) findViewById(R.id.field);
-		_button = (Button) findViewById(R.id.button);
-		_button.setOnClickListener(new ButtonClickHandler());
+		_image = (ImageView) findViewById(R.id.PreviewImage);
+		_field = (EditText) findViewById(R.id.ResultText);
+		_button = (Button) findViewById(R.id.TakePictureButton);
+		_textifyButton = (Button) findViewById(R.id.TextifyButton);
+		_resetButton = (Button) findViewById(R.id.ResetButton);
+		
+		_button.setOnClickListener(new TakePicture());
+		_textifyButton.setOnClickListener(new PerformRecognition());
+		_resetButton.setOnClickListener(new ResetScreen());
 
 		_path = DATA_PATH + "/ocr.jpg";
 	}
 
-	public class ButtonClickHandler implements View.OnClickListener {
+	public class TakePicture implements View.OnClickListener {
 		public void onClick(View view) {
 			Log.v(TAG, "Starting Camera app");
 			startCameraActivity();
+		}
+	}
+	
+	public class PerformRecognition implements View.OnClickListener {
+		public void onClick(View view) {
+			Log.v(TAG, "Pre-Textify");
+			_button.setVisibility(View.GONE);
+			processBitmap(originalImageBitmap, boundingBoxesData);
+			_textifyButton.setVisibility(View.GONE);
+			_resetButton.setVisibility(View.VISIBLE);
+			Log.v(TAG, "Post-Textify");
+		}
+	}
+	
+	public class ResetScreen implements View.OnClickListener {
+		public void onClick(View view) {
+			_button.setVisibility(View.VISIBLE);
+			_image.setVisibility(View.GONE);
+			_textifyButton.setVisibility(View.GONE);
+			_field.setVisibility(View.GONE);
+			_field.setText("");
+			_resetButton.setVisibility(View.GONE);
 		}
 	}
 
@@ -155,7 +191,7 @@ public class MainActivity extends Activity {
 		BitmapFactory.Options options = new BitmapFactory.Options();
 		options.inSampleSize = 4;
 
-		Bitmap bitmap = BitmapFactory.decodeFile(_path, options);
+		originalImageBitmap = BitmapFactory.decodeFile(_path, options);
 
 		try {
 			ExifInterface exif = new ExifInterface(_path);
@@ -184,26 +220,75 @@ public class MainActivity extends Activity {
 			if (rotate != 0) {
 
 				// Getting width & height of the given image.
-				int w = bitmap.getWidth();
-				int h = bitmap.getHeight();
+				int w = originalImageBitmap.getWidth();
+				int h = originalImageBitmap.getHeight();
 
 				// Setting pre rotate
 				Matrix mtx = new Matrix();
 				mtx.preRotate(rotate);
 
 				// Rotating Bitmap
-				bitmap = Bitmap.createBitmap(bitmap, 0, 0, w, h, mtx, false);
+				originalImageBitmap = Bitmap.createBitmap(originalImageBitmap, 0, 0, w, h, mtx, false);
 			}
 
 			// Convert to ARGB_8888, required by tess
-			bitmap = bitmap.copy(Bitmap.Config.ARGB_8888, true);
-
+			originalImageBitmap = originalImageBitmap.copy(Bitmap.Config.ARGB_8888, true);
+			
 		} catch (IOException e) {
 			Log.e(TAG, "Couldn't correct orientation: " + e.toString());
 		}
 
-		// _image.setImageBitmap( bitmap );
+		showProcessedImagePreview(originalImageBitmap);
+	}
+	
+	protected void showProcessedImagePreview(Bitmap bitmap)
+	{
+		boundingBoxesData = dtNative.processImage(bitmap);
 		
+		Bitmap preview;
+		
+		if(boundingBoxesData.length > 0)
+		{
+			preview = dtNative.getPreviewImage(bitmap, boundingBoxesData);
+		}
+		else
+		{
+			preview = bitmap;
+		}
+		
+		_image.setImageBitmap(preview);
+		_image.setVisibility(View.VISIBLE);
+		_textifyButton.setVisibility(View.VISIBLE);
+	}
+	
+	protected void processBitmap(Bitmap bitmap, int[] boundingBoxes)
+	{
+		Log.v(TAG, "Bounding boxes are:"+Arrays.toString(boundingBoxes));
+		
+		if(boundingBoxes.length > 0)
+		{
+			Log.v(TAG, "Using individual textRegions for OCR");
+			for(int index=0; index<boundingBoxes.length; index+=4)
+			{
+				int startX = boundingBoxes[index];
+				int startY = boundingBoxes[index+1];
+				int endX = boundingBoxes[index+2];
+				int endY = boundingBoxes[index+3];
+				Bitmap textRegion = Bitmap.createBitmap(bitmap, startX, startY, endX, endY);
+				useTesseract(textRegion);
+			}
+		}
+		else
+		{
+			Log.v(TAG, "Using entire image for OCR");
+			useTesseract(bitmap);
+		}
+		
+		_field.setVisibility(View.VISIBLE);
+	}
+	
+	protected void useTesseract(Bitmap bitmap)
+	{
 		Log.v(TAG, "Before baseApi");
 
 		TessBaseAPI baseApi = new TessBaseAPI();

@@ -5,15 +5,39 @@
     android:orientation="vertical" >
 
     <Button
-        android:id="@+id/button"
+        android:id="@+id/TakePictureButton"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="@string/button_text" />
+        android:text="@string/take_picture_text" />
+    
+    <ImageView
+        android:id="@+id/PreviewImage"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_weight="0.82"
+        android:src="@drawable/abc_ab_bottom_solid_dark_holo"
+        android:visibility="gone" />
+    
+    <Button
+        android:id="@+id/TextifyButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/textify_text"
+        android:visibility="gone" />
 
     <EditText
-        android:id="@+id/field"
+        android:id="@+id/ResultText"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:hint="@string/text_hint" />
+        android:ems="10"
+        android:hint="@string/text_hint"
+        android:visibility="gone" />
+    
+    <Button
+        android:id="@+id/ResetButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/reset_text"
+        android:visibility="gone" />
 
 </LinearLayout>

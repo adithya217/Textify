@@ -4,7 +4,9 @@
     <string name="app_name">Textify</string>
     <string name="hello_world">Hello world!</string>
     <string name="action_settings">Settings</string>
-    <string name="button_text">Textify!</string>
+    <string name="take_picture_text">Take Picture</string>
+    <string name="textify_text">Textify!</string>
+    <string name="reset_text">Reset</string>
     <string name="text_hint">Text will appear here</string>
 
 </resources>
